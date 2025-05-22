@@ -95,7 +95,109 @@ def test_nn2poly_algorithm_precomputed_example():
     # Using np.isclose for float comparison with tolerance
     # Default tolerance for np.isclose: rtol=1e-05, atol=1e-08
     assert np.isclose(coefficient_actual, coefficient_expected), \
-        f"Coefficient mismatch for label {target_label_tuple}, neuron {neuron_idx} in H2. " \
+        f"Coefficient mismatch for label {target_label_tuple}, neuron {neuron_idx} in H2 (Layer 2 output). " \
         f"Actual: {coefficient_actual}, Expected: {coefficient_expected}"
+
+def test_nn2poly_list_input_default_options():
+    """
+    Corresponds to R test 'nn2poly with list input ... default options'.
+    Uses testing_helper_1 data but with R's default options:
+    max_order = 2, keep_layers = FALSE, taylor_orders (scalar) = 8.
+    """
+    # WEIGHTS_LIST_DATA and AF_STRING_LIST_DATA are already defined globally in this file.
+    # R test uses default taylor_orders = 8 (scalar)
+    # R test uses default max_order = 2
+    # R test uses default keep_layers = FALSE
+
+    # Precompute partitions for this specific scenario
+    # p_vars = 2 (from WEIGHTS_LIST_DATA[0])
+    # For taylor_orders_param=8 (scalar), af_list=["softplus", "softplus", "linear"]
+    # processed_taylor_orders = [8, 8, 1]
+    # q_max_final_order = min(prod([8,8,1]), max_order=2) = min(64, 2) = 2
+    p_vars_test = WEIGHTS_LIST_DATA[0].shape[0] - 1
+    taylor_orders_for_this_test = helpers.obtain_taylor_vector(8, AF_STRING_LIST_DATA)
+    q_max_for_this_test = helpers.obtain_final_poly_order(2, taylor_orders_for_this_test) # Should be 2
+
+    partitions_for_this_test = helpers.obtain_partitions_with_labels(
+        p_variables=p_vars_test,
+        q_max_poly_order=q_max_for_this_test,
+        combinatorics_module=combinatorics,
+        algorithms_module=algorithms
+    )
+
+    result = core.nn2poly(
+        weights_list=WEIGHTS_LIST_DATA,
+        af_string_list=AF_STRING_LIST_DATA,
+        max_order=2,
+        keep_layers=False,
+        taylor_orders_param=8, # R default scalar
+        precomputed_partitions=partitions_for_this_test,
+        variable_names_list=None,
+        verbose=False
+    )
+
+    # Assertion 1: Result is a single dict (keep_layers=False)
+    assert isinstance(result, dict)
+    assert 'labels' in result and 'values' in result
+    assert not any(key.startswith('layer_') for key in result.keys()) # Not a nested dict
+
+    # Assertion 2: Order of the last term in the final polynomial is 2
+    final_labels = result['labels']
+    assert isinstance(final_labels, list)
+    
+    max_len_found = 0
+    if final_labels:
+        # Assuming labels are sorted by length, then lexicographically by core.nn2poly
+        max_len_found = len(final_labels[-1]) 
+    
+    assert max_len_found == 2, f"Expected max order of final polynomial to be 2, found {max_len_found}"
+
+    # Assertion 3: Specific coefficient value
+    # R test: `expect_equal(object$values[which(object$labels == "x1x1"),1], -4.429, tolerance = test_precision_less)`
+    # R label "x1x1" -> Python label (1,1)
+    # R values are terms x neurons. Python result (keep_layers=False) is also terms x neurons.
+    # R `object$values[,1]` means first neuron (index 0).
+    
+    target_label_tuple = (1,1)
+    try:
+        label_idx = final_labels.index(target_label_tuple)
+    except ValueError:
+        pytest.fail(f"Label {target_label_tuple} not found in final labels: {final_labels}")
+    
+    # Assuming single output neuron from WEIGHTS_LIST_DATA structure (last W is (3,1))
+    neuron_idx = 0 
+    coefficient_actual = result['values'][label_idx, neuron_idx]
+    coefficient_expected = -4.429 # From R test
+    
+    assert np.isclose(coefficient_actual, coefficient_expected, atol=1e-3), \
+        f"Coefficient mismatch for label {target_label_tuple}, neuron {neuron_idx}. " \
+        f"Actual: {coefficient_actual}, Expected: {coefficient_expected}"
+
+
+def test_nn2poly_error_wrong_dimensions():
+    """
+    Corresponds to R test 'nn2poly error when wrong dimensions are given in weights'.
+    Relies on check_weights_dimensions called by core.nn2poly.
+    """
+    # AF_STRING_LIST_DATA is already defined globally.
+    # Make a copy of WEIGHTS_LIST_DATA to modify it for this test
+    malformed_weights_list = [np.copy(w) for w in WEIGHTS_LIST_DATA]
+    
+    # Modify weights_list_data[1] (second weight matrix) to have incorrect dimensions
+    # Original W2 is np.ones((3,2)). Previous W1 is np.ones((3,2)).
+    # check_weights_dimensions expects W_curr.shape[0] == W_prev.shape[1] + 1
+    # So, malformed_weights_list[1].shape[0] should not be WEIGHTS_LIST_DATA[0].shape[1] + 1
+    # WEIGHTS_LIST_DATA[0].shape[1] is 2. So, expected input dim for W2 is 2+1=3.
+    # If malformed_weights_list[1] is (4,2), it's an error.
+    malformed_weights_list[1] = np.ones((4,2)) 
+
+    with pytest.raises(ValueError, match="Weight dimensions are not compatible."):
+        core.nn2poly(
+            weights_list=malformed_weights_list,
+            af_string_list=AF_STRING_LIST_DATA,
+            max_order=MAX_ORDER_DATA, # From global scope, or set specific for this test
+            taylor_orders_param=TAYLOR_ORDERS_DATA # From global scope
+            # precomputed_partitions not strictly needed if it fails before that
+        )
 
 ```

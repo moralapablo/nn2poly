@@ -27,9 +27,22 @@ def nn2poly(weights_list, af_string_list, max_order=2, keep_layers=False,
         verbose (bool): If True, print progress information.
 
     Returns:
-        dict or list: If keep_layers is False, a dict {'labels': ..., 'values': ...}
-                      for the final polynomial (values transposed to terms x neurons).
-                      If keep_layers is True, a list of such dicts for all steps.
+        dict:
+            If `keep_layers` is `False`:
+                A dictionary representing the final polynomial:
+                `{'labels': list_of_labels, 'values': np.ndarray_terms_x_neurons}`.
+                Labels are tuples (e.g., `(0,)` for intercept, `(1,1)` for `x1^2`)
+                or formatted strings if `variable_names_list` is provided.
+                Values are transposed to `terms x neurons`.
+            If `keep_layers` is `True`:
+                A dictionary where keys are layer identifiers (e.g., `'layer_1'`, `'layer_2'`)
+                and each value is another dictionary:
+                `{'input': poly_dict, 'output': poly_dict}`.
+                - `poly_dict` is `{'labels': list_of_labels, 'values': np.ndarray_terms_x_neurons}`.
+                - `'input'` refers to the polynomial state before the layer's non-linear activation 
+                  (i.e., after the linear transformation of the current layer).
+                - `'output'` refers to the polynomial state after the layer's non-linear activation.
+                Labels within these dicts can also be formatted strings if `variable_names_list` is provided.
     """
 
     # 1. Initial Validations and Setup
@@ -216,32 +229,111 @@ def nn2poly(weights_list, af_string_list, max_order=2, keep_layers=False,
         if verbose: print(f"  Layer {layer_idx + 1}: Processed. Current max order: {current_max_order}.")
 
     # 4. Return Value Formatting
-    final_labels = current_P_labels
-    final_values_transposed = current_P_values.T # Transpose to (terms x neurons)
-
-    if variable_names_list:
-        if len(variable_names_list) != p_vars:
-            warnings.warn("Length of variable_names_list does not match p_vars. Ignoring names.")
-        else:
-            # Convert labels from integer indices to variable names
-            def format_label(label_tuple):
-                if not label_tuple: return "1" # Intercept
-                counts = collections.Counter(label_tuple)
-                terms = []
-                for var_idx_1based, count in sorted(counts.items()):
-                    var_name = variable_names_list[var_idx_1based - 1] # 0-indexed list
-                    terms.append(f"{var_name}^{count}" if count > 1 else var_name)
-                return "*".join(terms)
-            
-            final_labels = [format_label(l) for l in final_labels]
-            if keep_layers:
-                for log_entry in full_results_log:
-                    log_entry['labels'] = [format_label(l) for l in log_entry['labels']]
-
-
     if keep_layers:
-        return full_results_log
-    else:
+        final_output_dict_nested = {}
+        # num_nn_layers is len(af_string_list)
+        # full_results_log structure from implementation:
+        # [P0_dict, Z1_dict, H1_dict, Z2_dict, H2_dict, ..., Z_N_dict, H_N_dict]
+        # Length = 1 (P0) + 2 * num_nn_layers.
+        # P0 is at full_results_log[0].
+        # Z_l (linear output for layer l, R-layer l) is at full_results_log[2*l - 1] (1-based l).
+        # H_l (non-linear output for layer l, R-layer l) is at full_results_log[2*l] (1-based l).
+
+        for r_layer_num_1_based in range(1, num_nn_layers + 1):
+            layer_key = f'layer_{r_layer_num_1_based}'
+            
+            # Z_l (input to non-linear stage of layer l)
+            input_idx_in_log = (2 * r_layer_num_1_based) - 1 
+            # H_l (output of non-linear stage of layer l)
+            output_idx_in_log = 2 * r_layer_num_1_based
+
+            if input_idx_in_log >= len(full_results_log):
+                warnings.warn(f"Index out of bounds for layer {r_layer_num_1_based} input ('Z_{r_layer_num_1_based}'). Log length: {len(full_results_log)}")
+                continue # Or handle more gracefully depending on expected state
+
+            # Retrieve the poly_dict from the log. It already has 'labels' and 'values' (transposed).
+            layer_input_poly_dict = full_results_log[input_idx_in_log]
+
+            layer_output_poly_dict = None
+            if output_idx_in_log < len(full_results_log):
+                layer_output_poly_dict = full_results_log[output_idx_in_log]
+            else:
+                # This handles if the very last logged item was a linear step,
+                # and the corresponding non-linear step output is implicitly the same.
+                # (e.g., if last layer is linear, H_N is effectively Z_N transformed by linear activation)
+                # The R code sets output = input in this case.
+                layer_output_poly_dict = layer_input_poly_dict 
+                warnings.warn(f"Output for layer {r_layer_num_1_based} ('H_{r_layer_num_1_based}') not found in log, "
+                              f"using its input ('Z_{r_layer_num_1_based}') as output. "
+                              f"Log length: {len(full_results_log)}, needed output_idx: {output_idx_in_log}")
+            
+            current_layer_result = {
+                'input': {'labels': list(layer_input_poly_dict['labels']), 
+                          'values': layer_input_poly_dict['values'].copy()},
+                'output': {'labels': list(layer_output_poly_dict['labels']),
+                           'values': layer_output_poly_dict['values'].copy()}
+            }
+
+            if variable_names_list:
+                # This formatting should apply to the poly_dicts being stored.
+                # The main var name formatting at the end is for when keep_layers=False.
+                if len(variable_names_list) != p_vars:
+                    # Warning already issued by main function earlier if list provided but wrong length
+                    pass
+                else:
+                    def format_labels_in_poly_dict(poly_d):
+                        if not isinstance(poly_d['labels'], list) or \
+                           not (all(isinstance(l, str) for l in poly_d['labels']) or \
+                                all(isinstance(l, tuple) for l in poly_d['labels'])) :
+                             # Already formatted or not in expected tuple format, skip.
+                            return
+
+                        if not poly_d['labels'] or isinstance(poly_d['labels'][0], str): # Already formatted
+                            return
+
+                        formatted_labels = []
+                        for label_tuple in poly_d['labels']: # Assuming original tuple labels
+                            if not label_tuple: formatted_labels.append("1") # Intercept
+                            else:
+                                counts = collections.Counter(label_tuple)
+                                terms = []
+                                for var_idx_1based, count in sorted(counts.items()):
+                                    # Ensure var_idx_1based is valid before accessing variable_names_list
+                                    if 1 <= var_idx_1based <= len(variable_names_list):
+                                        var_name = variable_names_list[var_idx_1based - 1]
+                                        terms.append(f"{var_name}^{count}" if count > 1 else var_name)
+                                    else: # Should not happen if p_vars is correct
+                                        terms.append(f"var{var_idx_1based}^{count}" if count > 1 else f"var{var_idx_1based}")
+                                formatted_labels.append("*".join(terms) if terms else "1")
+                        poly_d['labels'] = formatted_labels
+                    
+                    format_labels_in_poly_dict(current_layer_result['input'])
+                    format_labels_in_poly_dict(current_layer_result['output'])
+            
+            final_output_dict_nested[layer_key] = current_layer_result
+        return final_output_dict_nested
+        
+    else: # keep_layers is False
+        final_labels = current_P_labels
+        final_values_transposed = current_P_values.T 
+
+        if variable_names_list:
+            if len(variable_names_list) != p_vars:
+                warnings.warn("Length of variable_names_list does not match p_vars. Ignoring names.")
+            else:
+                def format_label(label_tuple): # Duplicated formatting logic, could be refactored
+                    if not label_tuple: return "1"
+                    counts = collections.Counter(label_tuple)
+                    terms = []
+                    for var_idx_1based, count in sorted(counts.items()):
+                        if 1 <= var_idx_1based <= len(variable_names_list):
+                            var_name = variable_names_list[var_idx_1based - 1]
+                            terms.append(f"{var_name}^{count}" if count > 1 else var_name)
+                        else:
+                            terms.append(f"var{var_idx_1based}^{count}" if count > 1 else f"var{var_idx_1based}")
+                    return "*".join(terms) if terms else "1"
+                final_labels = [format_label(l) for l in final_labels]
+        
         return {'labels': final_labels, 'values': final_values_transposed}
 
 ```
