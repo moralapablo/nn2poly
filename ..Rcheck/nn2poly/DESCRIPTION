@@ -1,5 +1,6 @@
 Package: nn2poly
-Title: Neural Network Weights Transformation into Polynomial Coefficients
+Title: Neural Network Weights Transformation into Polynomial
+        Coefficients
 Version: 0.1.2.9000
 Authors@R: c(
     person(given = "Pablo", family = "Morala", role = c("aut", "cre"),
@@ -17,28 +18,19 @@ Description: Implements a method that builds the coefficients of a polynomial
     (densely connected). This is achieved using Taylor expansion at the
     activation functions.  The obtained polynomial coefficients can be used
     to explain features (and their interactions) importance  in the neural network,
-    therefore working as a tool for interpretability or eXplainable Artificial 
+    therefore working as a tool for interpretability or eXplainable Artificial
     Intelligence (XAI). See Morala et al. 2021 <doi:10.1016/j.neunet.2021.04.036>,
     and 2023 <doi:10.1109/TNNLS.2023.3330328>.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Depends: R (>= 3.5.0)
-Imports:
-    Rcpp,
-    generics,
-    matrixStats,
-    pracma
-Suggests:
-    keras, tensorflow, reticulate,
-    luz, torch,
-    cowplot, ggplot2, patchwork,
-    testthat (>= 3.0.0), vdiffr,
-    knitr, rmarkdown
-LinkingTo:
-    Rcpp,
-    RcppArmadillo
+Imports: Rcpp, generics, matrixStats, pracma
+Suggests: keras, tensorflow, reticulate, luz, torch, cowplot, ggplot2,
+        patchwork, testthat (>= 3.0.0), vdiffr, knitr, rmarkdown
+LinkingTo: Rcpp, RcppArmadillo
 VignetteBuilder: knitr
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.2.3
 Config/testthat/edition: 3
 URL: https://ibidat.github.io/nn2poly/
+Built: R 4.3.3; x86_64-pc-linux-gnu; 2025-05-20 23:13:28 UTC; unix

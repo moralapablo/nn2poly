@@ -1,0 +1,11 @@
+add_constraints         Add constraints to a neural network
+eval_poly               Polynomial evaluation
+luz_model_sequential    Build a 'luz' model composed of a linear stack
+                        of layers
+nn2poly                 Obtain polynomial representation
+plot.nn2poly            Plot method for 'nn2poly' objects.
+plot_diagonal           Plots a comparison between two sets of points.
+plot_taylor_and_activation_potentials
+                        Plots activation potentials and Taylor
+                        expansion.
+predict.nn2poly         Predict method for 'nn2poly' objects.

@@ -1,0 +1,150 @@
+
+R version 4.3.3 (2024-02-29) -- "Angel Food Cake"
+Copyright (C) 2024 The R Foundation for Statistical Computing
+Platform: x86_64-pc-linux-gnu (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> library(testthat)
+> library(nn2poly)
+>
+> test_check("nn2poly")
+[ FAIL 14 | WARN 0 | SKIP 8 | PASS 77 ]
+
+══ Skipped tests (8) ═══════════════════════════════════════════════════════════
+• {keras} is not installed (5): 'test-constraints.R:3:3',
+  'test-nn2poly.R:58:3', 'test-parameters.R:2:3', 'test-parameters.R:27:3',
+  'test-plot_taylor_and_activation_potentials.R:2:3'
+• {luz} is not installed (3): 'test-constraints_luz.R:2:3',
+  'test-nn2poly.R:74:3', 'test-parameters.R:56:3'
+
+══ Failed tests ════════════════════════════════════════════════════════════════
+── Failure ('test-combinatorics.R:7:3'): multiset partitions are correctly generated ──
+Snapshot of code has changed:
+     old               | new
+ [3] Output            -   generate_partitions(5, 3)  [2]
+ [4]   [[1]]           - Output                       [3]
+ [5]   [[1]][[1]]      -   [[1]]                      [4]
+ [6]   [[1]][[1]][[1]] -   [[1]]$multiset             [5]
+ [7]   [1] 1           |   [1] 1                      [6]
+ [8]                   |                              [7]
+ [9]                   -   [[1]]$partitions           [8]
+[10]                   -   [[1]]$partitions[[1]]      [9]
+[11]   [[2]]           -   [[1]]$partitions[[1]][[1]] [10]
+[12]   [[2]][[1]]      -   [1] 1                      [11]
+ ... ...                 ...                          and 161 more ...
+
+* Run `testthat::snapshot_accept('combinatorics')` to accept the change.
+* Run `testthat::snapshot_review('combinatorics')` to interactively review the change.
+── Failure ('test-combinatorics.R:8:3'): multiset partitions are correctly generated ──
+Snapshot of code has changed:
+old[2:1327] vs new[2:1402]
+    generate_partitions(3, 5)
+  Output
+    [[1]]
+-   [[1]][[1]]
++   [[1]]$multiset
+-   [[1]][[1]][[1]]
++   [1] 1
+-   [1] 1
++
+-
++   [[1]]$partitions
+-
++   [[1]]$partitions[[1]]
+-
++   [[1]]$partitions[[1]][[1]]
+-   [[2]]
++   [1] 1
+and 1391 more ...
+
+* Run `testthat::snapshot_accept('combinatorics')` to accept the change.
+* Run `testthat::snapshot_review('combinatorics')` to interactively review the change.
+── Failure ('test-nn2poly.R:27:3'): nn2poly with list input against precomputed example with single
+          output, check also that nn2poly class is given to the output ──
+round(coeff, 4) (`actual`) not equal to 0.6335 (`expected`).
+
+  `actual`: 17.5
+`expected`:  0.6
+── Failure ('test-nn2poly.R:53:3'): nn2poly with list input against precomputed example with
+          default options ──
+round(coeff, 3) (`actual`) not equal to -4.429 (`expected`).
+
+  `actual`: 45911340.3
+`expected`:       -4.4
+── Failure ('test-nn2poly_algorithm.R:29:3'): nn2poly_algorithm against precomputed example ──
+`coeff` (`actual`) not equal to 0.63351833 (`expected`).
+
+  `actual`: 17.5
+`expected`:  0.6
+── Error ('test-nn2poly_methods_plot.R:16:3'): Test the plot for a polynomial generated with `keep_layers = FALSE` ──
+Error: package 'ggplot2' is required for this functionality
+Backtrace:
+    ▆
+ 1. ├─base::plot(result, n = 5) at test-nn2poly_methods_plot.R:16:3
+ 2. └─nn2poly:::plot.nn2poly(result, n = 5)
+── Error ('test-nn2poly_methods_plot.R:38:3'): Test the plot for a polynomial generated with n = NULL ──
+Error: package 'ggplot2' is required for this functionality
+Backtrace:
+    ▆
+ 1. ├─base::plot(result) at test-nn2poly_methods_plot.R:38:3
+ 2. └─nn2poly:::plot.nn2poly(result)
+── Error ('test-nn2poly_methods_plot.R:60:3'): Test the plot for a polynomial generated with  `keep_layers = TRUE` ──
+Error: package 'ggplot2' is required for this functionality
+Backtrace:
+    ▆
+ 1. ├─base::plot(result, n = 5) at test-nn2poly_methods_plot.R:60:3
+ 2. └─nn2poly:::plot.nn2poly(result, n = 5)
+── Error ('test-nn2poly_methods_plot.R:82:3'): Test the plot for a polynomial generated with  `keep_layers = TRUE`
+          and n=NULL ──
+Error: package 'ggplot2' is required for this functionality
+Backtrace:
+    ▆
+ 1. ├─base::plot(result, n = NULL) at test-nn2poly_methods_plot.R:82:3
+ 2. └─nn2poly:::plot.nn2poly(result, n = NULL)
+── Error ('test-nn2poly_methods_plot.R:107:3'): Test the plot for a polynomial generated with  vector values input, all positive coeficients ──
+Error: package 'ggplot2' is required for this functionality
+Backtrace:
+    ▆
+ 1. ├─base::plot(result, n = 5) at test-nn2poly_methods_plot.R:107:3
+ 2. └─nn2poly:::plot.nn2poly(result, n = 5)
+── Error ('test-nn2poly_methods_plot.R:132:3'): Test the plot for a polynomial generated with  0 valued coeff and positive and negative coefficients ──
+Error: package 'ggplot2' is required for this functionality
+Backtrace:
+    ▆
+ 1. ├─base::plot(result, n = 5) at test-nn2poly_methods_plot.R:132:3
+ 2. └─nn2poly:::plot.nn2poly(result, n = 5)
+── Error ('test-nn2poly_methods_plot.R:156:3'): Test the plot for a polynomial generated with  all negative coefficients ──
+Error: package 'ggplot2' is required for this functionality
+Backtrace:
+    ▆
+ 1. ├─base::plot(result, n = 5) at test-nn2poly_methods_plot.R:156:3
+ 2. └─nn2poly:::plot.nn2poly(result, n = 5)
+── Error ('test-plot_diagonal.R:7:3'): plot_diagonal for two arbitraty sequence of numbers ──
+Error: package 'ggplot2' is required for this functionality
+Backtrace:
+    ▆
+ 1. └─nn2poly:::plot_diagonal(a, b, xlab = "this is a test", ylab = "yes, this is a test") at test-plot_diagonal.R:7:3
+── Error ('test-plot_diagonal.R:20:3'): plot_diagonal for two arbitraty sequence of numbers
+          but without line ──
+Error: package 'ggplot2' is required for this functionality
+Backtrace:
+    ▆
+ 1. └─nn2poly:::plot_diagonal(...) at test-plot_diagonal.R:20:3
+
+[ FAIL 14 | WARN 0 | SKIP 8 | PASS 77 ]
+Error: Test failures
+In addition: Warning message:
+`teardown()` was deprecated in the 3rd edition.
+ℹ Please use test fixtures instead see vignette('test-fixtures') for details
+Execution halted

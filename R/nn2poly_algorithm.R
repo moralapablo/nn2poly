@@ -202,18 +202,33 @@ nn2poly_algorithm <- function(weights_list,
       }
     }
 
+    # Determine the maximum order for parts in partitions for the current layer.
+    # This is based on the Taylor order of the *previous* non-linear activation.
+    # For the first layer, the "previous" order is 1 (input variables).
+    q_val_for_filtering <- if (current_layer == 1) {
+      1
+    } else {
+      taylor_orders[current_layer - 1]
+    }
+
+    # Filter the global set of partitions based on q_val_for_filtering
+    active_partitions_for_layer <- filter_partitions_by_max_part_order(
+      all_partitions,
+      q_val_for_filtering
+    )
+
     # Parallel lapply
     # The output index is already computed in the linear case
-    # but not for l=1 #REVISETHISLATER
+    # but not for l=1
     values <- alg_non_linear(
       coeffs_list_input$values,
       labels_input = coeffs_list_input$labels,
       labels_output = coeffs_list_output$labels,
-      taylor_orders = taylor_orders,
+      taylor_orders = taylor_orders, # Note: this is the vector of taylor_orders for all layers
       current_layer = current_layer,
       g = af_derivatives_list[[current_layer]],
-      partitions_labels = all_partitions$labels,
-      partitions = all_partitions$partitions
+      partitions_labels = active_partitions_for_layer$labels,
+      partitions = active_partitions_for_layer$partitions
     )
 
     # Join the coefficients with the labels as first list element:
@@ -262,18 +277,23 @@ obtain_partitions_with_labels <- function(p, q_max) {
   }
 
 
-  partitions <- generate_partitions(as.integer(p), as.integer(q_max))
+  # generate_partitions now returns a list of lists,
+  # where each inner list has a 'multiset' and its 'partitions'
+  partitions_data <- generate_partitions(as.integer(p), as.integer(q_max))
 
-  labels <- vector(mode = "list", length = length(partitions))
-  # Obtain labels:
-  for (i in 1:length(partitions)){
-    # Here it is used that the first partition of the multiset is always
-    # the multiset itself. This could be generalized in case we change the
-    # generation order. #REVISETHISLATER
-    labels[[i]] <- partitions[[i]][[1]][[1]]
+  labels_list <- vector(mode = "list", length = length(partitions_data))
+  partitions_list <- vector(mode = "list", length = length(partitions_data))
+
+  # Obtain labels and partitions:
+  for (i in 1:length(partitions_data)) {
+    element <- partitions_data[[i]]
+    # The multiset itself is the label
+    labels_list[[i]] <- element[["multiset"]]
+    # The corresponding partitions
+    partitions_list[[i]] <- element[["partitions"]]
   }
 
-  return(list("labels" = labels, "partitions" = partitions))
+  return(list("labels" = labels_list, "partitions" = partitions_list))
 }
 
 #' Computes the maximum polynomial order allowed by max_order and
@@ -358,18 +378,26 @@ obtain_derivatives_list <- function(af_string_list, taylor_orders) {
   af_derivatives_list <- vector(mode = "list", length = n)
 
   for (i in 1:n) {
-    # Obtain the vector with the derivatives of the activation function up to the given degree:
-    # centered at 0
-    # and use rev to reverse and match our notation.
-    af_derivatives_list[[i]] <- rev(pracma::taylor(af_function_list[[i]], 0, taylor_orders[i]))
+    # Obtain coefficients c0, c1, ..., c_m for powers x^0, x^1, ..., x^m
+    # pracma::taylor(f, x0, n) returns coefficients for (x-x0)^k
+    # The C++ code expects g[k] to be the coefficient for the k-th power.
+    coeffs <- pracma::taylor(af_function_list[[i]], 0, taylor_orders[i])
 
-    # here we have a problem: if the last term of the taylor expansion is 0,
-    # the previous method deletes that entry and then the dimensions willm not macth later
-    # therefore, we add 0's if needed:
-    diff_len <- (taylor_orders[i] + 1) - length(af_derivatives_list[[i]])
-    if (diff_len > 0) {
-      af_derivatives_list[[i]] <- c(af_derivatives_list[[i]], rep(0, diff_len))
+    desired_length <- taylor_orders[i] + 1
+    current_length <- length(coeffs)
+
+    if (current_length < desired_length) {
+      # Append zeros if pracma::taylor returns fewer coefficients
+      # (e.g. if higher order derivatives are zero)
+      coeffs <- c(coeffs, rep(0, desired_length - current_length))
     }
+    # Ensure it's not longer either, though pracma::taylor shouldn't make it longer
+    # than n + 1 (for order n).
+    if (current_length > desired_length) {
+        coeffs <- coeffs[1:desired_length]
+    }
+
+    af_derivatives_list[[i]] <- coeffs
   }
 
   return(af_derivatives_list)

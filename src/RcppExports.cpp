@@ -11,20 +11,6 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
-// select_allowed_partitions
-std::vector<ListOf<IntegerVector>> select_allowed_partitions(IntegerVector equivalent_label, int q_previous_layer, ListOf<IntegerVector> labels, List partitions);
-RcppExport SEXP _nn2poly_select_allowed_partitions(SEXP equivalent_labelSEXP, SEXP q_previous_layerSEXP, SEXP labelsSEXP, SEXP partitionsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< IntegerVector >::type equivalent_label(equivalent_labelSEXP);
-    Rcpp::traits::input_parameter< int >::type q_previous_layer(q_previous_layerSEXP);
-    Rcpp::traits::input_parameter< ListOf<IntegerVector> >::type labels(labelsSEXP);
-    Rcpp::traits::input_parameter< List >::type partitions(partitionsSEXP);
-    rcpp_result_gen = Rcpp::wrap(select_allowed_partitions(equivalent_label, q_previous_layer, labels, partitions));
-    return rcpp_result_gen;
-END_RCPP
-}
 // alg_non_linear
 arma::mat alg_non_linear(arma::mat coeffs_input, ListOf<IntegerVector> labels_input, ListOf<IntegerVector> labels_output, IntegerVector taylor_orders, int current_layer, arma::vec g, ListOf<IntegerVector> partitions_labels, List partitions);
 RcppExport SEXP _nn2poly_alg_non_linear(SEXP coeffs_inputSEXP, SEXP labels_inputSEXP, SEXP labels_outputSEXP, SEXP taylor_ordersSEXP, SEXP current_layerSEXP, SEXP gSEXP, SEXP partitions_labelsSEXP, SEXP partitionsSEXP) {
@@ -67,25 +53,24 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// generate_partitions_full
-List generate_partitions_full(int p, int q_max);
-RcppExport SEXP _nn2poly_generate_partitions_full(SEXP pSEXP, SEXP q_maxSEXP) {
+// filter_partitions_by_max_part_order
+List filter_partitions_by_max_part_order(List global_partitions_obj, int max_part_order_filter);
+RcppExport SEXP _nn2poly_filter_partitions_by_max_part_order(SEXP global_partitions_objSEXP, SEXP max_part_order_filterSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< int >::type p(pSEXP);
-    Rcpp::traits::input_parameter< int >::type q_max(q_maxSEXP);
-    rcpp_result_gen = Rcpp::wrap(generate_partitions_full(p, q_max));
+    Rcpp::traits::input_parameter< List >::type global_partitions_obj(global_partitions_objSEXP);
+    Rcpp::traits::input_parameter< int >::type max_part_order_filter(max_part_order_filterSEXP);
+    rcpp_result_gen = Rcpp::wrap(filter_partitions_by_max_part_order(global_partitions_obj, max_part_order_filter));
     return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_nn2poly_select_allowed_partitions", (DL_FUNC) &_nn2poly_select_allowed_partitions, 4},
     {"_nn2poly_alg_non_linear", (DL_FUNC) &_nn2poly_alg_non_linear, 8},
     {"_nn2poly_combinations_with_repetition", (DL_FUNC) &_nn2poly_combinations_with_repetition, 2},
     {"_nn2poly_generate_partitions", (DL_FUNC) &_nn2poly_generate_partitions, 2},
-    {"_nn2poly_generate_partitions_full", (DL_FUNC) &_nn2poly_generate_partitions_full, 2},
+    {"_nn2poly_filter_partitions_by_max_part_order", (DL_FUNC) &_nn2poly_filter_partitions_by_max_part_order, 2},
     {NULL, NULL, 0}
 };
 

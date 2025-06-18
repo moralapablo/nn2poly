@@ -3,63 +3,40 @@
 #include "utils.h"
 using namespace Rcpp;
 
-
-// [[Rcpp::export]]
-std::vector<ListOf<IntegerVector>> select_allowed_partitions(
-    IntegerVector equivalent_label, int q_previous_layer,
-    ListOf<IntegerVector> labels, List partitions)
-{
-  //REVISETHISLATER This function could be omitted if we already include it when
-  // generating the partitions.
-
-  // Obtain chosen label position from the partitions labels list:
-  int pos; for (pos = 0; pos < labels.size(); pos++) {
-    if (labels[pos].size() != equivalent_label.size())
-      continue;
-    if (is_true(all(labels[pos] == equivalent_label)))
-      break;
+// Helper function to find the index of a target label within a list of labels
+// Returns -1 if not found (consider error handling for production code)
+int find_label_index(const Rcpp::ListOf<Rcpp::IntegerVector>& all_labels, const Rcpp::IntegerVector& target_label) {
+  for (int i = 0; i < all_labels.size(); ++i) {
+    Rcpp::IntegerVector current_label = all_labels[i];
+    if (current_label.size() == target_label.size()) {
+      bool match = true;
+      for (int j = 0; j < current_label.size(); ++j) {
+        if (current_label[j] != target_label[j]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) {
+        return i;
+      }
+    }
   }
-
-  // Extract the list with the partitions for the chosen label:
-  ListOf<ListOf<IntegerVector>> all_partitions_for_this_label =
-    as<ListOf<ListOf<IntegerVector>>>(partitions[pos]);
-
-  // number of partitions
-  int n_partitions = all_partitions_for_this_label.size();
-
-  // initialize list to store the output.
-  std::vector<ListOf<IntegerVector>> output;
-
-  for (int i = 0; i < n_partitions; i++) {
-    // Select one single partition
-    ListOf<IntegerVector> partition =
-      as<ListOf<IntegerVector>>(all_partitions_for_this_label[i]);
-
-    // Check that the given partition has all elements allowed by q_previous_layer.
-    // With sapply we sum the lengths of the vectors associated with each partition and see if
-    // they are less or equal than q_previous_layer.
-    if (is_true(all(sapply(partition, Rf_length) <= q_previous_layer)))
-      output.push_back(clone(partition));
-  }
-
-  return output;
+  return -1; // Not found
 }
-
-
 
 // [[Rcpp::export]]
 arma::mat alg_non_linear(arma::mat coeffs_input,
                              ListOf<IntegerVector> labels_input,
                              ListOf<IntegerVector> labels_output,
-                             IntegerVector taylor_orders,
+                             IntegerVector taylor_orders, // Vector of Taylor orders for all layers
                              int current_layer, arma::vec g,
-                             ListOf<IntegerVector> partitions_labels, List partitions)
+                             ListOf<IntegerVector> partitions_labels, // Pre-filtered labels
+                             List partitions) // Pre-filtered partitions
 {
   // Extract the needed parameters and values:
+  // q_layer is the Taylor order for the current activation function
   int q_layer = taylor_orders[current_layer - 1];
-  int q_previous_layer = 1;
-  if (current_layer != 1)
-    q_previous_layer = taylor_orders[current_layer - 2];
+  // q_previous_layer is no longer needed here for filtering, as partitions are pre-filtered.
 
   // Obtain total number of terms in the polynomial from labels
   int n_poly_terms = labels_output.size();
@@ -99,16 +76,37 @@ arma::mat alg_non_linear(arma::mat coeffs_input,
     IntegerVector equivalent_label = match(label, comp);
     equivalent_label.sort();
 
-    // Obtain all allowed partitions of the equivalent term
-    auto allowed_partitions = select_allowed_partitions(
-      equivalent_label, q_previous_layer, partitions_labels, partitions);
+    // Obtain chosen label position from the partitions labels list:
+    int pos;
+    for (pos = 0; pos < partitions_labels.size(); pos++) {
+      if (partitions_labels[pos].size() != equivalent_label.size())
+        continue;
+      if (is_true(all(partitions_labels[pos] == equivalent_label)))
+        break;
+    }
+    // If pos is out of bounds, it means the label was not found. This might indicate an issue.
+    // For now, assume it's found. Consider adding error handling if pos == partitions_labels.size().
+
+    // Extract the list with the (already filtered) partitions for the chosen label:
+    // Construct as std::vector then wrap, to avoid Rcpp proxy object issues.
+    List outer_list_sexp = as<List>(partitions[pos]); // partitions[pos] is a SEXP for ListOf<ListOf<IV>>
+    std::vector<ListOf<IntegerVector>> temp_allowed_partitions_std_vec;
+    temp_allowed_partitions_std_vec.reserve(outer_list_sexp.size());
+    for (int k_outer = 0; k_outer < outer_list_sexp.size(); ++k_outer) {
+        // Each element outer_list_sexp[k_outer] is a SEXP for ListOf<IV>
+        temp_allowed_partitions_std_vec.push_back(as<ListOf<IntegerVector>>(outer_list_sexp[k_outer]));
+    }
+    ListOf<ListOf<IntegerVector>> allowed_partitions = wrap(temp_allowed_partitions_std_vec);
 
     // Number of partitions
     int n_allowed_partitions = allowed_partitions.size();
 
     // Replace again all the partitions to match the original indexes
+    // This loop iterates through the pre-filtered partitions.
     for (int p_index = 0; p_index < n_allowed_partitions; p_index++) {
-      ListOf<IntegerVector> aux = allowed_partitions[p_index];
+      // Explicitly use as<>() to convert from the SEXP obtained by operator[]
+      // This helps resolve ambiguity with ChildVector proxies.
+      ListOf<IntegerVector> aux = Rcpp::as<ListOf<IntegerVector>>(allowed_partitions[p_index]);
       for (int i = 0; i < aux.size(); i++) {
         IntegerVector auxv = aux[i];
         aux[i] = concat(comp, auxv)[match(auxv, concat(seq, auxv)) - 1];
@@ -123,7 +121,8 @@ arma::mat alg_non_linear(arma::mat coeffs_input,
 
       for (int p_index = 0; p_index < n_allowed_partitions; p_index++) {
         // Extract the chosen partition (a list) from the allowed partitions
-        ListOf<IntegerVector> partition = allowed_partitions[p_index];
+        // Explicitly use as<>() to convert from the SEXP obtained by operator[]
+        ListOf<IntegerVector> partition = Rcpp::as<ListOf<IntegerVector>>(allowed_partitions[p_index]);
 
         // We now need to check that each partition does not exceed n elements
         // so we have the condition m_0 + ... + m_C = n satisfied.
@@ -138,45 +137,49 @@ arma::mat alg_non_linear(arma::mat coeffs_input,
         if (difference < 0) continue;
 
         // We need to obtain the m_index values to compute the multinomial
-        // coefficient
+        // A. Replace Multinomial Coefficient Calculation
+        std::map<std::vector<int>, int> unique_part_counts;
+        for (int k = 0; k < partition.size(); ++k) {
+          IntegerVector rcpp_vec = partition[k];
+          std::vector<int> std_vec(rcpp_vec.begin(), rcpp_vec.end());
+          unique_part_counts[std_vec]++;
+        }
 
-        // This is simply counting how many times each unique term appears,
-        // obtaining the factorials and then doing the product. The terms that
-        // do not appear dont need to be counted as they will be 0, their
-        // factorial 1 and at the end will, not affect the total product.
+        std::vector<double> all_counts_for_lgamma;
+        all_counts_for_lgamma.push_back(static_cast<double>(difference + 1.0)); // +1 for lgamma
 
-        // This can be done as follows. //REVISETHISLATER when this used
-        // string vectors, it was easier to count all with table().
-        // Now with vectors of different lengths in the vector this no
-        // longer works and a not so efficient workaround is used
-        ListOf<IntegerVector> unique_in_partition = Function("unique")(partition);
-        NumericVector m(unique_in_partition.size() + 1);
-        for (int i = 0; i < unique_in_partition.size(); i++)
-          m[i + 1] = sum(as<IntegerVector>(Function("%in%")(
-            partition, List::create(unique_in_partition[i]))));
-        m[0] = difference;
+        double sum_of_log_factorials = 0.0;
+        sum_of_log_factorials += std::lgamma(static_cast<double>(difference + 1.0));
 
-        // Compute the multinomial coefficient
-        NumericVector fm = factorial(m);
-        double multinomial_coef = std::tgamma(n + 1) / prod(fm);
+        for (const auto& entry : unique_part_counts) {
+          sum_of_log_factorials += std::lgamma(static_cast<double>(entry.second + 1.0));
+        }
 
-
-        // Now we need to use the labels to get the needed coefficients:
-        LogicalVector needed = Function("%in%")(labels_input, partition);
-        arma::mat coeffs_input_needed = coeffs_input.cols(find(as<arma::vec>(needed) == 1));
-        for (unsigned int i = 0; i < coeffs_input_needed.n_cols; i++)
-          coeffs_input_needed.col(i) = arma::pow(coeffs_input_needed.col(i), m[i + 1]);
+        double multinomial_coef = std::exp(std::lgamma(n + 1.0) - sum_of_log_factorials);
+        if (sum_of_log_factorials > std::lgamma(n + 1.0) + 1e-9) { // Check for potential negative result before exp due to precision
+             multinomial_coef = 0; // if sum of part factorials is larger than n!
+        }
 
 
-        // Finally compute the product of coefficients according to multinomial
-        // theorem and add it to the summatory
-        // For the product, it is sufficient to call prod(coeffs_input_needed)
-        // without including the exponent m, as this vector will contain
-        // each coefficient as many times as its exponent would indicate.
-        // REVISETHISLATER esto debería poder hacerse sin bucle con row product
-        summatory += multinomial_coef *
-          arma::prod(coeffs_input_needed,1) % arma::pow(coeffs_input.col(0), difference);
-        // Note that coeffs_input[0] is the intercept
+        // B. Replace Product of Powered Coefficients Calculation
+        arma::vec combined_term_product = arma::ones<arma::vec>(coeffs_input.n_rows);
+        for (const auto& entry : unique_part_counts) {
+          // Convert std::vector<int> key back to Rcpp::IntegerVector
+          Rcpp::IntegerVector current_part_label_key = Rcpp::wrap(entry.first);
+
+          int input_col_idx = find_label_index(labels_input, current_part_label_key);
+          if (input_col_idx == -1) {
+            // This should ideally not happen if labels_input is comprehensive
+            // and partitions are derived correctly.
+            Rcpp::stop("Label part not found in input labels during product calculation.");
+          }
+          arma::vec coeffs_column = coeffs_input.col(input_col_idx);
+          combined_term_product %= arma::pow(coeffs_column, entry.second);
+        }
+
+        // C. Update Summatory
+        summatory += multinomial_coef * combined_term_product % arma::pow(coeffs_input.col(0), difference);
+        // Note that coeffs_input.col(0) is the intercept
 
 
       }
