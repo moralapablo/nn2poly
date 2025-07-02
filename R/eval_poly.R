@@ -238,16 +238,23 @@ reorder_intercept_in_monomials <- function(monomials_matrix,
 
     # Force monomials_matrix to be a matrix, which will be not if
     # we have a single observation.
-    M<- matrix(monomials_matrix, nrow = n_sample)
+    M <- matrix(monomials_matrix, nrow = n_sample)
 
-    M_prev <- matrix(M[,2:(intercept_position)], nrow = n_sample)
-    M_intercept <- matrix(M[,1], nrow = n_sample)
-    M_post <- matrix(M[,(intercept_position+1):ncol(M)], nrow = n_sample)
-
-
-    monomials_matrix <- cbind(M_prev,
-                              M_intercept,
-                              M_post)
+    # More efficient approach: create column index vector and reorder directly
+    # instead of creating multiple temporary matrices
+    n_cols <- ncol(M)
+    if (intercept_position <= n_cols) {
+      # Create reordering index: move column 1 to intercept_position
+      col_order <- c(2:intercept_position, 1, (intercept_position+1):n_cols)
+      # Filter out invalid indices (in case intercept_position is at the end)
+      col_order <- col_order[col_order <= n_cols]
+      
+      # Reorder columns efficiently using matrix subsetting
+      monomials_matrix <- M[, col_order, drop = FALSE]
+    } else {
+      # If intercept_position exceeds matrix dimensions, keep original
+      monomials_matrix <- M
+    }
   }
 
   return(monomials_matrix)
@@ -268,6 +275,12 @@ reorder_intercept_in_monomials <- function(monomials_matrix,
 #' @noRd
 
 multiply_variables <- function(label, newdata){
+  # Validate that all label indices are within bounds of newdata
+  if (any(label < 1) || any(label > ncol(newdata))) {
+    stop("Label indices must be between 1 and ", ncol(newdata), 
+         " (number of columns in newdata)", call. = FALSE)
+  }
+  
   # Get the needed values with repetition determined by the label
   values_rep <- newdata[,label]
 
