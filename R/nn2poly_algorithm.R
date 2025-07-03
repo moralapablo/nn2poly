@@ -293,7 +293,21 @@ obtain_final_poly_order <- function(max_order, taylor_orders){
     # This condition allows for integers and also
     # integers written as numeric
     max_order <- as.integer(max_order)
-    poly_order <- min(prod(taylor_orders),max_order)
+    
+    # Check for potential overflow before computing product
+    # Use cumulative product with overflow check
+    taylor_product <- 1L
+    for (order in taylor_orders) {
+      # Check if multiplication would cause overflow
+      if (taylor_product > .Machine$integer.max / order) {
+        # If overflow would occur, use max_order as limit
+        taylor_product <- max_order + 1L  # Ensure min() will choose max_order
+        break
+      }
+      taylor_product <- taylor_product * as.integer(order)
+    }
+    
+    poly_order <- min(taylor_product, max_order)
 
     # Warning if max_order has not been reached. (Very rare situation)
     if (poly_order < max_order){
